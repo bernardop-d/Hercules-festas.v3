@@ -18,12 +18,16 @@ import psycopg2.extras
 import psycopg2.pool
 from dotenv import load_dotenv
 
-load_dotenv()
+# Quando empacotado com PyInstaller, __file__ aponta para o bundle interno.
+# Queremos carregar o .env da pasta onde o executável está de fato.
+import sys as _sys
+_EXE_DIR = Path(_sys.executable).parent if getattr(_sys, 'frozen', False) else Path(__file__).parent
+load_dotenv(_EXE_DIR / '.env')
 
 # ── Configuração ─────────────────────────────────────────────
 PORT   = int(os.environ.get('PORT', 5000))
 HOST   = os.environ.get('HOST', '0.0.0.0')
-BASE   = Path(__file__).parent
+BASE   = Path(_sys._MEIPASS) if getattr(_sys, 'frozen', False) else Path(__file__).parent
 DB_URL = os.environ.get('DATABASE_URL', '')
 
 # Preços padrão — usados apenas para seed inicial do banco
