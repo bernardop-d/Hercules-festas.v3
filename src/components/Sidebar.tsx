@@ -29,6 +29,16 @@ const NAV_ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
       </svg>
     ),
   },
+  {
+    view: 'nota-fiscal',
+    label: 'Nota Fiscal',
+    icon: (
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
 ]
 
 export function Sidebar({ view, onViewChange, stats, dark, onToggleDark }: Props) {
@@ -58,6 +68,7 @@ export function Sidebar({ view, onViewChange, stats, dark, onToggleDark }: Props
       <nav className="flex-1 flex flex-col gap-0.5 p-3">
         {NAV_ITEMS.map(item => (
           <button
+            type="button"
             key={item.view}
             onClick={() => onViewChange(item.view)}
             className={`flex items-center gap-2.5 px-3 py-2.5 rounded text-left w-full text-[0.82rem]
@@ -91,6 +102,7 @@ export function Sidebar({ view, onViewChange, stats, dark, onToggleDark }: Props
 
         {/* Toggle dark/light */}
         <button
+          type="button"
           onClick={onToggleDark}
           className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded
                      border border-[var(--c-border)] text-ink3 text-[0.72rem] font-mono

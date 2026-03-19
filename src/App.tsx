@@ -7,6 +7,7 @@ import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './components/Dashboard'
 import { NovoAluguel } from './components/NovoAluguel'
 import { ModalEdit } from './components/ModalEdit'
+import { NotaFiscal } from './components/NotaFiscal'
 
 export function App() {
   const { dark, toggle } = useDarkMode(true)
@@ -60,6 +61,8 @@ export function App() {
               onEdit={setEditTarget}
               onTogglePago={togglePagamento}
             />
+          ) : view === 'nota-fiscal' ? (
+            <NotaFiscal alugueis={alugueis} />
           ) : (
             <NovoAluguel
               precos={precos}

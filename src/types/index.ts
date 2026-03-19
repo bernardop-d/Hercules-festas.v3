@@ -12,7 +12,7 @@ export interface Aluguel {
   criado_em: string
 }
 
-export type View = 'dashboard' | 'novo'
+export type View = 'dashboard' | 'novo' | 'nota-fiscal'
 
 export type ItemDict = Record<string, number>
 
