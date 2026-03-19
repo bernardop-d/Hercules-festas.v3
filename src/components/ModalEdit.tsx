@@ -35,9 +35,11 @@ export function ModalEdit({ aluguel, precos, onClose, onSave, onDelete, onDuplic
   const [itens,  setItens]  = useState<ItemDict>(() => parseItens(aluguel.itens))
   const [status, setStatus] = useState(aluguel.status || 'confirmado')
 
-  const [saving,      setSaving]      = useState(false)
-  const [pdfLoading,  setPdfLoading]  = useState(false)
-  const [duplicating, setDuplicating] = useState(false)
+  const [saving,         setSaving]         = useState(false)
+  const [pdfLoading,     setPdfLoading]     = useState(false)
+  const [duplicating,    setDuplicating]    = useState(false)
+  const [confirmDelete,  setConfirmDelete]  = useState(false)
+  const [confirmDuplicate, setConfirmDuplicate] = useState(false)
 
   // Referência para detectar alterações não salvas
   const pristine = useRef({ form: buildForm(aluguel), itens: parseItens(aluguel.itens), status: aluguel.status || 'confirmado' })
@@ -125,12 +127,14 @@ export function ModalEdit({ aluguel, precos, onClose, onSave, onDelete, onDuplic
   }
 
   const handleDelete = async () => {
-    if (!confirm(`Excluir aluguel de ${aluguel.nome}? Esta ação não pode ser desfeita.`)) return
+    if (!confirmDelete) { setConfirmDelete(true); return }
+    setConfirmDelete(false)
     try { await onDelete(aluguel.id) } catch { /* App.tsx exibe o toast */ }
   }
 
   const handleDuplicate = async () => {
-    if (!confirm(`Duplicar pedido de ${aluguel.nome}?`)) return
+    if (!confirmDuplicate) { setConfirmDuplicate(true); return }
+    setConfirmDuplicate(false)
     setDuplicating(true)
     try {
       await onDuplicate({ ...buildPayload(), pago: false, data_entrega: '' })
@@ -264,23 +268,57 @@ export function ModalEdit({ aluguel, precos, onClose, onSave, onDelete, onDuplic
                        hover:text-ink hover:border-[var(--c-border2)] transition-all">
             Cancelar
           </button>
-          <button type="button" onClick={handleDelete}
-            className="px-4 py-2.5 rounded-sm border border-red-400/30
-                       text-red-400 text-[0.82rem] font-semibold cursor-pointer
-                       hover:bg-red-400/10 transition-all">
-            Excluir
-          </button>
-          <button type="button" onClick={handleDuplicate} disabled={duplicating}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-sm
-                       border border-[var(--c-border)] text-ink2 text-[0.78rem] font-semibold
-                       cursor-pointer hover:border-accent/40 hover:text-accent hover:bg-accent/5
-                       disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            {duplicating ? 'Duplicando...' : 'Duplicar'}
-          </button>
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[0.7rem] text-red-400">Confirmar exclusão?</span>
+              <button type="button" onClick={handleDelete}
+                className="px-3 py-2 rounded-sm border border-red-400/50 bg-red-400/10
+                           text-red-400 text-[0.78rem] font-bold cursor-pointer hover:bg-red-400/20 transition-all">
+                Sim, excluir
+              </button>
+              <button type="button" onClick={() => setConfirmDelete(false)}
+                className="px-3 py-2 rounded-sm border border-[var(--c-border)] text-ink2
+                           text-[0.78rem] cursor-pointer hover:text-ink transition-all">
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={handleDelete}
+              className="px-4 py-2.5 rounded-sm border border-red-400/30
+                         text-red-400 text-[0.82rem] font-semibold cursor-pointer
+                         hover:bg-red-400/10 transition-all">
+              Excluir
+            </button>
+          )}
+
+          {confirmDuplicate ? (
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[0.7rem] text-ink2">Duplicar pedido?</span>
+              <button type="button" onClick={handleDuplicate} disabled={duplicating}
+                className="px-3 py-2 rounded-sm border border-accent/40 bg-accent/10
+                           text-accent text-[0.78rem] font-bold cursor-pointer hover:bg-accent/20
+                           disabled:opacity-40 transition-all">
+                {duplicating ? 'Duplicando...' : 'Confirmar'}
+              </button>
+              <button type="button" onClick={() => setConfirmDuplicate(false)}
+                className="px-3 py-2 rounded-sm border border-[var(--c-border)] text-ink2
+                           text-[0.78rem] cursor-pointer hover:text-ink transition-all">
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={handleDuplicate} disabled={duplicating}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-sm
+                         border border-[var(--c-border)] text-ink2 text-[0.78rem] font-semibold
+                         cursor-pointer hover:border-accent/40 hover:text-accent hover:bg-accent/5
+                         disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              {duplicating ? 'Duplicando...' : 'Duplicar'}
+            </button>
+          )}
 
           <div className="ml-auto flex items-center gap-2 flex-wrap">
             <button type="button" onClick={handleGeneratePdf} disabled={pdfLoading}

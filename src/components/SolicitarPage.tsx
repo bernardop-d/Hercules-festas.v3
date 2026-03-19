@@ -157,8 +157,12 @@ export function SolicitarPage() {
   const [pixConfirmado, setPixConfirmado] = useState(() => {
     try { return sessionStorage.getItem('hf_pix_confirmado') === '1' } catch { return false }
   })
-  const [pixCopiado,    setPixCopiado]    = useState(false)
-  const [qrDataUrl,     setQrDataUrl]     = useState<string>('')
+  const [pixCopiado,        setPixCopiado]        = useState(false)
+  const [qrDataUrl,         setQrDataUrl]         = useState<string>('')
+  const [qrError,           setQrError]           = useState(false)
+  const [pagamentoRecebido, setPagamentoRecebido] = useState(() => {
+    try { return sessionStorage.getItem('hf_pago') === '1' } catch { return false }
+  })
 
   // Sucesso
   const [sucesso, setSucesso] = useState<Sucesso>(() => {
@@ -177,8 +181,10 @@ export function SolicitarPage() {
     const digits = rawCep.replace(/\D/g, '')
     if (digits.length !== 8) return
     setCepStatus('loading')
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 5000)
     try {
-      const res  = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      const res  = await fetch(`https://viacep.com.br/ws/${digits}/json/`, { signal: ctrl.signal })
       const data = await res.json()
       if (data.erro) { setCepStatus('error'); return }
       setLogradouro(data.logradouro || '')
@@ -190,6 +196,8 @@ export function SolicitarPage() {
       setCepStatus('ok')
     } catch {
       setCepStatus('error')
+    } finally {
+      clearTimeout(timer)
     }
   }
 
@@ -197,8 +205,10 @@ export function SolicitarPage() {
     const digits = rawCep.replace(/\D/g, '')
     if (digits.length !== 8) return
     setNfCepStatus('loading')
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 5000)
     try {
-      const res  = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      const res  = await fetch(`https://viacep.com.br/ws/${digits}/json/`, { signal: ctrl.signal })
       const data = await res.json()
       if (data.erro) { setNfCepStatus('error'); return }
       const endereco = [data.logradouro, data.bairro].filter(Boolean).join(', ')
@@ -211,6 +221,8 @@ export function SolicitarPage() {
       setNfCepStatus('ok')
     } catch {
       setNfCepStatus('error')
+    } finally {
+      clearTimeout(timer)
     }
   }
 
@@ -246,19 +258,32 @@ export function SolicitarPage() {
     if (!pixConfirmado || !orderTotal) return
     const payload = pixPayload(PIX_KEY, 'Hercules Festas', 'Sao Paulo', orderTotal / 2)
     QRCode.toDataURL(payload, { errorCorrectionLevel: 'M', margin: 2, width: 220 })
-      .then(setQrDataUrl)
-      .catch(() => {/* ignora */})
+      .then(url => { setQrDataUrl(url); setQrError(false) })
+      .catch(() => setQrError(true))
   }, [pixConfirmado, orderTotal])
 
-  // Polling: verifica se admin confirmou o pedido PIX
+  // Polling: verifica confirmação do pedido e pagamento (máx 30 min)
   useEffect(() => {
-    if (sucesso !== 'pix' || pixConfirmado || !orderId) return
+    if (sucesso !== 'pix' || !orderId || pagamentoRecebido) return
+    let attempts = 0
+    const MAX_ATTEMPTS = 360 // 360 × 5s = 30 min
     const check = async () => {
+      if (attempts >= MAX_ATTEMPTS) { clearInterval(interval); return }
+      attempts++
       try {
         const res  = await fetch(`/api/alugueis/${orderId}`)
         if (!res.ok) return
         const data = await res.json()
-        if (data.status === 'confirmado') {
+        // Detecta pagamento confirmado (pago = 1)
+        if (data.pago === 1) {
+          clearInterval(interval)
+          sessionStorage.setItem('hf_pago', '1')
+          setPagamentoRecebido(true)
+          setPixConfirmado(true)
+          return
+        }
+        // Detecta confirmação do pedido pelo admin
+        if (!pixConfirmado && data.status === 'confirmado') {
           sessionStorage.setItem('hf_pix_confirmado', '1')
           if (data.total) {
             sessionStorage.setItem('hf_order_total', String(data.total))
@@ -266,12 +291,12 @@ export function SolicitarPage() {
           }
           setPixConfirmado(true)
         }
-      } catch { /* ignora */ }
+      } catch { /* ignora falha de rede pontual */ }
     }
     check()
     const interval = setInterval(check, 5000)
     return () => clearInterval(interval)
-  }, [sucesso, pixConfirmado, orderId])
+  }, [sucesso, pixConfirmado, orderId, pagamentoRecebido])
 
   // Persistir rascunho no sessionStorage
   useEffect(() => {
@@ -353,7 +378,7 @@ export function SolicitarPage() {
       if (!nf.razaoSocial.trim()) ne.razaoSocial = 'Informe o nome/razão social.'
       const digits = nf.cpfCnpj.replace(/\D/g, '')
       if (!digits || (digits.length !== 11 && digits.length !== 14)) ne.cpfCnpj = 'CPF (11 dígitos) ou CNPJ (14 dígitos) inválido.'
-      if (!nf.email.trim() || !nf.email.includes('@')) ne.email = 'Informe um e-mail válido.'
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(nf.email.trim())) ne.email = 'Informe um e-mail válido.'
       if (!nf.municipio.trim()) ne.municipio = 'Informe o município.'
       setNFErrors(ne)
       if (Object.keys(ne).length > 0) return false
@@ -479,12 +504,14 @@ ${itensTexto}${form.obs ? `\n\n💬 *Obs:* ${form.obs.trim()}` : ''}`
               )}
             </div>
             <h1 className="font-sans text-2xl font-bold text-ink mb-3">
-              {isWa ? 'Mensagem enviada!' : 'Pedido recebido!'}
+              {isWa ? 'Mensagem enviada!' : pagamentoRecebido ? 'Reserva garantida!' : 'Pedido recebido!'}
             </h1>
             <p className="font-sans text-[0.9rem] text-ink2 leading-relaxed mb-6">
               {isWa
                 ? 'Sua solicitação foi registrada e a mensagem abriu no WhatsApp. Nossa equipe responderá em breve com o orçamento.'
-                : 'Recebemos seu pedido. Nossa equipe analisará a disponibilidade e você receberá uma mensagem no WhatsApp com a confirmação e os dados para pagamento.'}
+                : pagamentoRecebido
+                  ? 'Seu pagamento foi confirmado e sua data está reservada. Entraremos em contato para combinar os detalhes da entrega.'
+                  : 'Recebemos seu pedido. Nossa equipe analisará a disponibilidade e você receberá uma mensagem no WhatsApp com a confirmação e os dados para pagamento.'}
             </p>
 
             {sucesso === 'pix' && !pixConfirmado && (
@@ -508,7 +535,40 @@ ${itensTexto}${form.obs ? `\n\n💬 *Obs:* ${form.obs.trim()}` : ''}`
               </div>
             )}
 
-            {sucesso === 'pix' && pixConfirmado && (
+            {sucesso === 'pix' && pagamentoRecebido && (
+              <div className="bg-green-400/[0.06] border border-green-400/30 rounded-lg p-5 text-left mb-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-full bg-green-400/15 border border-green-400/30
+                                  flex items-center justify-center shrink-0">
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-green-400">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="font-mono text-[0.7rem] font-bold text-green-400 uppercase tracking-[0.08em]">
+                    Pagamento confirmado!
+                  </p>
+                </div>
+                <p className="font-sans text-[0.85rem] text-ink leading-relaxed mb-3">
+                  Recebemos a confirmação do seu pagamento. Sua reserva está garantida! 🎉
+                </p>
+                <div className="space-y-2 text-[0.8rem] text-ink2">
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-400 mt-0.5">✓</span>
+                    <span>Nossa equipe entrará em contato para confirmar os detalhes da entrega.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-400 mt-0.5">✓</span>
+                    <span>O restante (50%) será cobrado na entrega dos equipamentos.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-400 mt-0.5">✓</span>
+                    <span>Qualquer dúvida, nos chame no WhatsApp.</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {sucesso === 'pix' && pixConfirmado && !pagamentoRecebido && (
               <div className="bg-teal-400/[0.06] border border-teal-400/30 rounded-lg p-5 text-left mb-4">
                 <div className="flex items-center gap-2 mb-3">
                   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-teal-400">
@@ -525,6 +585,11 @@ ${itensTexto}${form.obs ? `\n\n💬 *Obs:* ${form.obs.trim()}` : ''}`
                       <img src={qrDataUrl} alt="QR Code PIX" width={200} height={200} />
                     </div>
                   </div>
+                )}
+                {qrError && (
+                  <p className="text-center font-mono text-[0.7rem] text-red-400 mb-3">
+                    Não foi possível gerar o QR Code. Use o código Pix abaixo.
+                  </p>
                 )}
 
                 <div className="bg-bg border border-[var(--c-border)] rounded-lg p-4 mb-3">
@@ -585,10 +650,11 @@ ${itensTexto}${form.obs ? `\n\n💬 *Obs:* ${form.obs.trim()}` : ''}`
             <button
               type="button"
               onClick={() => {
-                ;['hf_sucesso','hf_form','hf_itens','hf_order_id','hf_order_total','hf_pix_confirmado']
+                ;['hf_sucesso','hf_form','hf_itens','hf_order_id','hf_order_total','hf_pix_confirmado','hf_pago']
                   .forEach(k => sessionStorage.removeItem(k))
                 setSucesso(null)
                 setPixConfirmado(false)
+                setPagamentoRecebido(false)
                 setOrderId(null)
                 setOrderTotal(0)
                 setItens({})

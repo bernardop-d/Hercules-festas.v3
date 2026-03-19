@@ -245,11 +245,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         precos  = get_precos()
         subtotal, itens_lista = 0.0, []
         for item, qtd in itens_dict.items():
-            preco = precos.get(item, 0)
-            if preco and qtd > 0:
-                sub = preco * qtd
-                subtotal += sub
-                itens_lista.append(f'{item} (x{qtd}) — R$ {sub:.2f}')
+            if not isinstance(qtd, (int, float)) or qtd <= 0:
+                continue
+            preco = precos.get(item, 0) or 0
+            sub   = preco * qtd
+            subtotal += sub
+            itens_lista.append(f'{item} (x{int(qtd)}) — R$ {sub:.2f}')
         itens_str = ', '.join(itens_lista) if itens_lista else 'Nenhum item'
         return subtotal, itens_str
 

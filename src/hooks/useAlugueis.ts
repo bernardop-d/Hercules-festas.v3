@@ -22,8 +22,8 @@ export function useAlugueis() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: Record<string, number> = await res.json()
       setPrecos(data)
-    } catch {
-      // não-crítico no carregamento inicial
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao carregar preços.')
     }
   }, [])
 
@@ -113,34 +113,47 @@ export function useAlugueis() {
   }
 
   const atualizarStatus = async (id: number, status: string): Promise<void> => {
-    const res = await fetch(`${API}/alugueis/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(data.erro || 'Erro ao atualizar status.')
+    // Snapshot para rollback
+    const prev = alugueis.find(a => a.id === id)
+    // Atualização otimista
+    setAlugueis(list => list.map(a => a.id === id ? { ...a, status: status as Aluguel['status'] } : a))
+    try {
+      const res = await fetch(`${API}/alugueis/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.erro || 'Erro ao atualizar status.')
+      }
+    } catch (e) {
+      // Rollback
+      if (prev) setAlugueis(list => list.map(a => a.id === id ? prev : a))
+      throw e
     }
-    // atualiza localmente sem round-trip completo
-    setAlugueis(prev =>
-      prev.map(a => a.id === id ? { ...a, status } : a)
-    )
   }
 
   const togglePagamento = async (id: number, pago: boolean): Promise<void> => {
-    const res = await fetch(`${API}/alugueis/${id}/pagamento`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pago }),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(data.erro || 'Erro ao atualizar pagamento.')
+    // Snapshot para rollback
+    const prev = alugueis.find(a => a.id === id)
+    // Atualização otimista
+    setAlugueis(list => list.map(a => a.id === id ? { ...a, pago: pago ? 1 : 0 } : a))
+    try {
+      const res = await fetch(`${API}/alugueis/${id}/pagamento`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pago }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.erro || 'Erro ao atualizar pagamento.')
+      }
+    } catch (e) {
+      // Rollback
+      if (prev) setAlugueis(list => list.map(a => a.id === id ? prev : a))
+      throw e
     }
-    setAlugueis(prev =>
-      prev.map(a => a.id === id ? { ...a, pago: pago ? 1 : 0 } : a)
-    )
   }
 
   const excluir = async (id: number): Promise<void> => {

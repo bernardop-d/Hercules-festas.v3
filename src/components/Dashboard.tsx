@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import type { Aluguel } from '../types'
 import { fmtMoney, fmtData } from '../utils/format'
 import { STATUS_META, STATUS_CYCLE, type StatusKey } from '../utils/status'
@@ -22,6 +22,7 @@ const PRE_STATUSES = new Set(['aguardando', 'em_negociacao', 'aguardando_pagamen
 
 export function Dashboard({ alugueis, onEdit, onTogglePago, onStatusChange, onConfirmar, onRecusar, onConfirmarPix }: Props) {
   const [busca,        setBusca]        = useState('')
+  const [buscaDebounced, setBuscaDebounced] = useState('')
   const [filtroPago,   setFiltroPago]   = useState<'todos' | 'pendente' | 'pago'>('todos')
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('todos')
   const [filtroData,   setFiltroData]   = useState<'todos' | 'hoje' | 'ontem' | '7dias' | '1mes'>('todos')
@@ -31,6 +32,11 @@ export function Dashboard({ alugueis, onEdit, onTogglePago, onStatusChange, onCo
   const [showPixPendente,  setShowPixPendente]  = useState(true)
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDebounced(busca), 250)
+    return () => clearTimeout(t)
+  }, [busca])
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -72,7 +78,7 @@ export function Dashboard({ alugueis, onEdit, onTogglePago, onStatusChange, onCo
     const list = alugueis.filter(a => {
       // Pré-confirmações têm banners próprios; só aparecem aqui se filtro explícito
       if (filtroStatus === 'todos' && PRE_STATUSES.has(a.status)) return false
-      if (busca && !a.nome.toLowerCase().includes(busca.toLowerCase()) && !a.contato?.includes(busca)) return false
+      if (buscaDebounced && !a.nome.toLowerCase().includes(buscaDebounced.toLowerCase()) && !a.contato?.includes(buscaDebounced)) return false
       if (filtroPago === 'pago'     &&  !a.pago) return false
       if (filtroPago === 'pendente' &&   a.pago) return false
       if (filtroStatus !== 'todos'  && a.status !== filtroStatus) return false
@@ -92,7 +98,7 @@ export function Dashboard({ alugueis, onEdit, onTogglePago, onStatusChange, onCo
       if (va > vb) return sortDir === 'asc' ?  1 : -1
       return 0
     })
-  }, [alugueis, busca, filtroPago, filtroStatus, filtroData, today, sortKey, sortDir])
+  }, [alugueis, buscaDebounced, filtroPago, filtroStatus, filtroData, today, sortKey, sortDir])
 
   const inputCls = `bg-bg3 border border-[var(--c-border)] rounded px-3 py-2
     font-sans text-[0.82rem] text-ink placeholder:text-ink3
@@ -193,8 +199,8 @@ export function Dashboard({ alugueis, onEdit, onTogglePago, onStatusChange, onCo
                       </span>
                     )}
                     {a.obs && (
-                      <p className="font-sans text-[0.72rem] text-ink3 mt-0.5 italic truncate max-w-[260px]"
-                        title={a.obs}>{a.obs}</p>
+                      <p className="font-sans text-[0.72rem] text-ink3 mt-0.5 italic truncate max-w-[260px] cursor-help"
+                        title={a.obs}>{a.obs}{a.obs.length > 60 ? ' …' : ''}</p>
                     )}
                   </div>
                 </div>

@@ -8,8 +8,8 @@ export interface Aluguel {
   total:        number
   subtotal:     number
   frete:        number
-  pago:         number   // 0 | 1
-  status:       string   // 'confirmado' | 'separado' | 'em_entrega' | 'devolvido'
+  pago:         0 | 1
+  status:       'aguardando' | 'em_negociacao' | 'aguardando_pagamento' | 'confirmado_parcial' | 'confirmado' | 'separado' | 'em_entrega' | 'devolvido'
   obs:          string
   criado_em:    string
 }
