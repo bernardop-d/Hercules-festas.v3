@@ -1,27 +1,29 @@
 export interface Aluguel {
-  id: number
-  nome: string
-  contato: string
-  endereco: string
+  id:           number
+  nome:         string
+  contato:      string
+  endereco:     string
   data_entrega: string
-  itens: string
-  total: number
-  subtotal: number
-  frete: number
-  pago: number   // SQLite: 0 | 1
-  criado_em: string
+  itens:        string
+  total:        number
+  subtotal:     number
+  frete:        number
+  pago:         number   // 0 | 1
+  status:       string   // 'confirmado' | 'separado' | 'em_entrega' | 'devolvido'
+  criado_em:    string
 }
 
-export type View = 'dashboard' | 'novo' | 'nota-fiscal'
+export type View = 'dashboard' | 'novo' | 'nota-fiscal' | 'precos'
 
 export type ItemDict = Record<string, number>
 
 export interface RentalPayload {
-  nome: string
-  contato: string
-  endereco: string
+  nome:         string
+  contato:      string
+  endereco:     string
   data_entrega: string
-  frete: number
-  pago: boolean
-  itens: ItemDict
+  frete:        number
+  pago:         boolean
+  itens:        ItemDict
+  status?:      string
 }

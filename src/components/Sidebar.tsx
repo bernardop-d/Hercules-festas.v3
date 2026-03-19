@@ -4,7 +4,7 @@ import { fmtMoney } from '../utils/format'
 interface Props {
   view: View
   onViewChange: (v: View) => void
-  stats: { ativos: number; pendentes: number; recebido: number }
+  stats: { ativos: number; pendentes: number; recebido: number; hoje: number }
   dark: boolean
   onToggleDark: () => void
 }
@@ -36,6 +36,16 @@ const NAV_ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
       <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    view: 'precos',
+    label: 'Preços',
+    icon: (
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
       </svg>
     ),
   },
@@ -87,9 +97,10 @@ export function Sidebar({ view, onViewChange, stats, dark, onToggleDark }: Props
       {/* Footer com stats */}
       <div className="p-5 border-t border-[var(--c-border)] space-y-0">
         {[
-          { label: 'Total ativo', value: String(stats.ativos), color: '' },
-          { label: 'Pendentes', value: String(stats.pendentes), color: 'text-red-400' },
-          { label: 'Recebido', value: fmtMoney(stats.recebido), color: 'text-green-400' },
+          { label: 'Total ativo',     value: String(stats.ativos),    color: '' },
+          { label: 'Entregas hoje', value: String(stats.hoje),      color: stats.hoje > 0 ? 'text-amber-400' : '' },
+          { label: 'Pendentes',     value: String(stats.pendentes), color: 'text-red-400' },
+          { label: 'Recebido',      value: fmtMoney(stats.recebido), color: 'text-green-400' },
         ].map(s => (
           <div key={s.label}
             className="flex justify-between items-center py-[5px] border-b border-[var(--c-border)] last:border-0">

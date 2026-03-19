@@ -79,12 +79,13 @@ export function ClientForm({ data, onChange }: Props) {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <label className={labelCls}>Data de entrega</label>
+          <label className={labelCls}>Data de entrega *</label>
           <input
             type="date"
             value={data.data_entrega}
             onChange={set('data_entrega')}
             min={new Date().toISOString().split('T')[0]}
+            required
             className={inputCls}
           />
         </div>
