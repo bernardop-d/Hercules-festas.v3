@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/* Dark mode via .dark class na raiz */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Tokens de cor: light e dark ─────────────────────────── */
+:root {
+  --c-bg:      #ffffff;
+  --c-bg2:     #fafaf9;
+  --c-bg3:     #f5f5f4;
+  --c-bg4:     #e7e5e4;
+  --c-text:    #1c1917;
+  --c-muted:   #57534e;
+  --c-dim:     #a8a29e;
+  --c-border:  rgba(0, 0, 0, 0.08);
+  --c-border2: rgba(0, 0, 0, 0.14);
+
+  /* Blue accent */
+  --blue:        #4f8ef7;
+  --blue-dark:   #3b7de8;
+  --blue-light:  rgba(79, 142, 247, 0.12);
+  --blue-mid:    rgba(79, 142, 247, 0.08);
+}
+
+.dark {
+  --c-bg:      #0d0d0d;
+  --c-bg2:     #141414;
+  --c-bg3:     #1a1a1a;
+  --c-bg4:     #252525;
+  --c-text:    #f0f0ec;
+  --c-muted:   #666662;
+  --c-dim:     #444441;
+  --c-border:  rgba(255, 255, 255, 0.08);
+  --c-border2: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Tailwind @theme: gera classes a partir dos tokens ───── */
+@theme inline {
+  --font-family-display: 'Inter', sans-serif;
+  --font-family-mono:    'DM Mono', monospace;
+  --font-family-sans:    'Inter', sans-serif;
+
+  --color-bg:           var(--c-bg);
+  --color-bg2:          var(--c-bg2);
+  --color-bg3:          var(--c-bg3);
+  --color-bg4:          var(--c-bg4);
+  --color-ink:          var(--c-text);
+  --color-ink2:         var(--c-muted);
+  --color-ink3:         var(--c-dim);
+  --color-accent:       var(--blue);
+  --color-accent-hover: var(--blue-dark);
+}
+
+/* ── Grain overlay ───────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.6;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--c-bg4); border-radius: 2px; }
+
+/* ── Date input calendar icon ────────────────────────────── */
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) opacity(0.3);
+  cursor: pointer;
+}
+
+/* ── Print ───────────────────────────────────────────────── */
+#print-area { display: none; }
+
+@media print {
+  body * { visibility: hidden; }
+  #print-area,
+  #print-area * { visibility: visible; }
+  #print-area {
+    position: fixed;
+    inset: 0;
+    background: white;
+    padding: 32px;
+    font-family: Arial, sans-serif;
+    color: #000;
+    display: block !important;
+  }
+}
+
+/* ── Animações ───────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes kpiIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-up  { animation: fadeUp  0.3s ease both; }
+.animate-modal-in { animation: modalIn 0.2s ease both; }
+.animate-kpi-in   { animation: kpiIn 0.5s ease var(--kpi-delay, 0ms) both; }

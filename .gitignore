@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Banco de dados local
+alugueis.db
+
+# Node
+node_modules/
+
+# Build output (gerado por npm run build)
+static/assets/
+static/index.html
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript build cache
+node_modules/.tmp/
+
+# Vite
+dist/
+
+# Electron build output
+release/
+out/
+electron/build/dist/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

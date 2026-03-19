@@ -60,9 +60,22 @@ def init_db():
                 data_entrega TEXT,
                 itens        TEXT,
                 total        REAL    DEFAULT 0,
+                subtotal     REAL    DEFAULT 0,
+                frete        REAL    DEFAULT 0,
+                pago         INTEGER DEFAULT 0,
                 criado_em    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Migração: adiciona colunas novas em bancos existentes
+        for col, definition in [
+            ('subtotal', 'REAL DEFAULT 0'),
+            ('frete',    'REAL DEFAULT 0'),
+            ('pago',     'INTEGER DEFAULT 0'),
+        ]:
+            try:
+                conn.execute(f'ALTER TABLE alugueis ADD COLUMN {col} {definition}')
+            except sqlite3.OperationalError:
+                pass  # Coluna já existe
         conn.commit()
 
 # ── Handler HTTP ───────────────────────────────────────────
@@ -141,23 +154,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_json({'erro': 'Nome é obrigatório.'}, 400)
                 return
 
-            total = 0.0
+            frete = float(data.get('frete', 0) or 0)
+            pago  = 1 if data.get('pago') else 0
+
+            subtotal = 0.0
             itens_lista = []
             for item, qtd in itens_dict.items():
                 preco = PRECOS.get(item, 0)
                 if preco and qtd > 0:
-                    subtotal = preco * qtd
-                    total   += subtotal
-                    itens_lista.append(f'{item} (x{qtd}) — R$ {subtotal:.2f}')
+                    sub      = preco * qtd
+                    subtotal += sub
+                    itens_lista.append(f'{item} (x{qtd}) — R$ {sub:.2f}')
 
             itens_str = ', '.join(itens_lista) if itens_lista else 'Nenhum item'
+            total = subtotal + frete
 
             with get_db() as conn:
                 cur = conn.execute(
                     '''INSERT INTO alugueis
-                       (nome, contato, endereco, data_entrega, itens, total)
-                       VALUES (?, ?, ?, ?, ?, ?)''',
-                    (nome, contato, endereco, data_entrega, itens_str, total)
+                       (nome, contato, endereco, data_entrega, itens, subtotal, frete, total, pago)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (nome, contato, endereco, data_entrega, itens_str, subtotal, frete, total, pago)
                 )
                 conn.commit()
                 novo_id = cur.lastrowid
@@ -165,6 +182,71 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_json({'id': novo_id, 'total': total, 'mensagem': 'Aluguel registrado!'}, 201)
         else:
             self.send_json({'erro': 'Rota não encontrada.'}, 404)
+
+    # ── PATCH ─────────────────────────────────────────────
+    def do_PATCH(self):
+        path  = urllib.parse.urlparse(self.path).path
+        parts = path.strip('/').split('/')
+        # parts: ['api', 'alugueis', ':id'] ou ['api', 'alugueis', ':id', 'pagamento']
+
+        if len(parts) < 3 or parts[1] != 'alugueis':
+            self.send_json({'erro': 'Rota não encontrada.'}, 404)
+            return
+
+        aluguel_id = parts[2]
+
+        # PATCH /api/alugueis/:id/pagamento — toggle rápido de pagamento
+        if len(parts) == 4 and parts[3] == 'pagamento':
+            data = self.read_body()
+            pago = 1 if data.get('pago') else 0
+            with get_db() as conn:
+                conn.execute('UPDATE alugueis SET pago = ? WHERE id = ?', (pago, aluguel_id))
+                conn.commit()
+            self.send_json({'mensagem': 'Pagamento atualizado.'})
+            return
+
+        # PATCH /api/alugueis/:id — edição completa
+        if len(parts) == 3:
+            data = self.read_body()
+
+            nome         = data.get('nome', '').strip()
+            contato      = data.get('contato', '').strip()
+            endereco     = data.get('endereco', '').strip()
+            data_entrega = data.get('data_entrega', '').strip()
+            frete        = float(data.get('frete', 0) or 0)
+            pago         = 1 if data.get('pago') else 0
+            itens_dict   = data.get('itens', {})
+
+            if not nome:
+                self.send_json({'erro': 'Nome é obrigatório.'}, 400)
+                return
+
+            subtotal = 0.0
+            itens_lista = []
+            for item, qtd in itens_dict.items():
+                preco = PRECOS.get(item, 0)
+                if preco and qtd > 0:
+                    sub      = preco * qtd
+                    subtotal += sub
+                    itens_lista.append(f'{item} (x{qtd}) — R$ {sub:.2f}')
+
+            itens_str = ', '.join(itens_lista) if itens_lista else 'Nenhum item'
+            total = subtotal + frete
+
+            with get_db() as conn:
+                conn.execute('''
+                    UPDATE alugueis
+                    SET nome=?, contato=?, endereco=?, data_entrega=?,
+                        itens=?, subtotal=?, frete=?, total=?, pago=?
+                    WHERE id=?
+                ''', (nome, contato, endereco, data_entrega,
+                      itens_str, subtotal, frete, total, pago, aluguel_id))
+                conn.commit()
+
+            self.send_json({'mensagem': 'Aluguel atualizado.', 'total': total})
+            return
+
+        self.send_json({'erro': 'Rota não encontrada.'}, 404)
 
     # ── DELETE ────────────────────────────────────────────
     def do_DELETE(self):
