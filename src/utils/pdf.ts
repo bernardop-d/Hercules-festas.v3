@@ -460,3 +460,65 @@ ${pagamentoBloco}`
 
   window.open(url, '_blank')
 }
+
+export function openWhatsappConfirmacao(a: Aluguel): void {
+  const data = fmtData(a.data_entrega)
+
+  const itensTexto = a.itens && a.itens !== 'Nenhum item'
+    ? a.itens.split(', ').map(i => `  • ${i}`).join('\n')
+    : '  • Nenhum item'
+
+  const total    = a.total || 0
+  const entrada  = total / 2
+
+  const msg = encodeURIComponent(
+`✅ *Hércules Festas — Pedido Confirmado! #${padId(a.id)}*
+
+Olá, *${a.nome}*! Seu pedido foi confirmado. 🎉
+
+📅 *Data de entrega:* ${data}
+${a.endereco ? `📍 *Endereço:* ${a.endereco}\n` : ''}
+📦 *Itens:*
+${itensTexto}
+
+*Total: R$ ${fmt(total)}*
+
+━━━━━━━━━━━━━━━━━━━━━
+💳 *Para garantir sua reserva, pague 50% agora:*
+
+🔑 *Chave PIX:* \`${PIX_KEY}\`
+💰 *Valor da entrada (50%):* R$ ${fmt(entrada)}
+
+Os outros R$ ${fmt(entrada)} são pagos na entrega. 🙏
+━━━━━━━━━━━━━━━━━━━━━
+Após o pagamento, nos envie o comprovante por aqui. Qualquer dúvida é só chamar! 😊`
+  )
+
+  const phone = formatPhone(a.contato || '')
+  const url   = phone
+    ? `https://wa.me/${phone}?text=${msg}`
+    : `https://wa.me/?text=${msg}`
+
+  window.open(url, '_blank')
+}
+
+export function openWhatsappRejeicao(a: Aluguel): void {
+  const data = fmtData(a.data_entrega)
+
+  const msg = encodeURIComponent(
+`Olá, *${a.nome}*! 😔
+
+Infelizmente não será possível realizar a locação para o dia *${data}* devido à alta demanda nessa data.
+
+Pedimos desculpas pelo transtorno. Caso queira verificar outra data disponível, é só nos chamar por aqui! 🎉
+
+*— Equipe Hércules Festas*`
+  )
+
+  const phone = formatPhone(a.contato || '')
+  const url   = phone
+    ? `https://wa.me/${phone}?text=${msg}`
+    : `https://wa.me/?text=${msg}`
+
+  window.open(url, '_blank')
+}

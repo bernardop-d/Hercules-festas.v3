@@ -17,6 +17,7 @@ const emptyForm = (): FormData => ({
   data_entrega: '',
   frete:        '',
   pago:         false,
+  obs:          '',
 })
 
 export function NovoAluguel({ precos, onSubmit, onError }: Props) {
@@ -52,8 +53,9 @@ export function NovoAluguel({ precos, onSubmit, onError }: Props) {
         endereco:     form.endereco.trim(),
         data_entrega: form.data_entrega,
         frete,
-        pago:  form.pago,
+        pago:         form.pago,
         itens,
+        obs:          form.obs.trim(),
       })
       setForm(emptyForm())
       setItens({})

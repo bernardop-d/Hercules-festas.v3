@@ -1,14 +1,15 @@
 interface FormData {
-  nome: string
-  contato: string
-  endereco: string
+  nome:         string
+  contato:      string
+  endereco:     string
   data_entrega: string
-  frete: string
-  pago: boolean
+  frete:        string
+  pago:         boolean
+  obs:          string
 }
 
 interface Props {
-  data: FormData
+  data:     FormData
   onChange: (data: FormData) => void
 }
 
@@ -34,9 +35,9 @@ function maskPhone(raw: string): string {
 
 export function ClientForm({ data, onChange }: Props) {
   const set = (field: keyof FormData) => (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    const raw   = field === 'pago' ? e.target.checked : e.target.value
+    const raw   = field === 'pago' ? (e.target as HTMLInputElement).checked : e.target.value
     const value = field === 'contato' ? maskPhone(raw as string) : raw
     onChange({ ...data, [field]: value })
   }
@@ -111,11 +112,23 @@ export function ClientForm({ data, onChange }: Props) {
         <input
           type="checkbox"
           checked={data.pago}
-          onChange={set('pago')}
+          onChange={e => onChange({ ...data, pago: e.target.checked })}
+          title="Pagamento já recebido"
           className="w-3.5 h-3.5 accent-[var(--blue)] cursor-pointer"
         />
         <span>Pagamento já recebido</span>
       </label>
+
+      <div className="flex flex-col gap-1.5">
+        <label className={labelCls}>Observações</label>
+        <textarea
+          value={data.obs}
+          onChange={set('obs')}
+          placeholder="Portão azul, ligar antes, 3º andar sem elevador..."
+          rows={2}
+          className={`${inputCls} resize-none`}
+        />
+      </div>
     </div>
   )
 }

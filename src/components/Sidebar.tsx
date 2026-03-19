@@ -4,9 +4,7 @@ import { fmtMoney } from '../utils/format'
 interface Props {
   view: View
   onViewChange: (v: View) => void
-  stats: { ativos: number; pendentes: number; recebido: number; hoje: number }
-  dark: boolean
-  onToggleDark: () => void
+  stats: { ativos: number; pendentes: number; recebido: number; hoje: number; aguardando: number }
 }
 
 const NAV_ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
@@ -51,7 +49,7 @@ const NAV_ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
   },
 ]
 
-export function Sidebar({ view, onViewChange, stats, dark, onToggleDark }: Props) {
+export function Sidebar({ view, onViewChange, stats }: Props) {
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-64 bg-bg2 border-r border-[var(--c-border)] flex flex-col z-50 overflow-hidden">
       {/* Linha decorativa no topo */}
@@ -97,9 +95,10 @@ export function Sidebar({ view, onViewChange, stats, dark, onToggleDark }: Props
       {/* Footer com stats */}
       <div className="p-5 border-t border-[var(--c-border)] space-y-0">
         {[
-          { label: 'Total ativo',     value: String(stats.ativos),    color: '' },
-          { label: 'Entregas hoje', value: String(stats.hoje),      color: stats.hoje > 0 ? 'text-amber-400' : '' },
-          { label: 'Pendentes',     value: String(stats.pendentes), color: 'text-red-400' },
+          { label: 'Total ativo',     value: String(stats.ativos),     color: '' },
+          { label: 'Aguardando',    value: String(stats.aguardando), color: stats.aguardando > 0 ? 'text-orange-400' : '' },
+          { label: 'Entregas hoje', value: String(stats.hoje),       color: stats.hoje > 0 ? 'text-amber-400' : '' },
+          { label: 'Pendentes',     value: String(stats.pendentes),  color: 'text-red-400' },
           { label: 'Recebido',      value: fmtMoney(stats.recebido), color: 'text-green-400' },
         ].map(s => (
           <div key={s.label}
@@ -111,28 +110,6 @@ export function Sidebar({ view, onViewChange, stats, dark, onToggleDark }: Props
           </div>
         ))}
 
-        {/* Toggle dark/light */}
-        <button
-          type="button"
-          onClick={onToggleDark}
-          className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded
-                     border border-[var(--c-border)] text-ink3 text-[0.72rem] font-mono
-                     hover:border-[var(--c-border2)] hover:text-ink2 transition-colors cursor-pointer"
-          title="Alternar tema"
-        >
-          {dark ? (
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
-            </svg>
-          ) : (
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-            </svg>
-          )}
-          {dark ? 'Modo claro' : 'Modo escuro'}
-        </button>
       </div>
     </aside>
   )

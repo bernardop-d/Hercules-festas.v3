@@ -15,20 +15,42 @@ function currentCompetencia() {
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
 
+// Extrai dados de NF do campo obs (preenchido pelo site do cliente)
+function parseNfFromObs(obs: string): Partial<NfData> {
+  if (!obs.includes('NOTA FISCAL SOLICITADA')) return {}
+  const get = (label: string) => {
+    const m = obs.match(new RegExp(`${label}:\\s*(.+)`))
+    return m ? m[1].trim() : ''
+  }
+  const munUf  = get('Município/UF')
+  const slash  = munUf.lastIndexOf('/')
+  const municipio = slash > -1 ? munUf.slice(0, slash).trim() : munUf
+  const uf        = slash > -1 ? munUf.slice(slash + 1).trim() : ''
+  return {
+    nome:     get('Razão Social'),
+    cpfCnpj:  get('CPF/CNPJ'),
+    email:    get('E-mail'),
+    endereco: get('Endereço'),
+    municipio,
+    uf: uf || 'RJ',
+  }
+}
+
 function emptyNf(a?: Aluguel | null): NfData {
+  const fromObs = a?.obs ? parseNfFromObs(a.obs) : {}
   return {
     numero:        '',
     dataEmissao:   todayIso(),
     competencia:   currentCompetencia(),
     prestadorCnpj: '',
     prestadorIM:   '',
-    nome:          a?.nome      || '',
-    cpfCnpj:       '',
-    endereco:      a?.endereco  || '',
-    municipio:     '',
-    uf:            'RJ',
-    email:         '',
-    telefone:      a?.contato   || '',
+    nome:          fromObs.nome     || a?.nome     || '',
+    cpfCnpj:       fromObs.cpfCnpj  || '',
+    endereco:      fromObs.endereco || a?.endereco || '',
+    municipio:     fromObs.municipio || '',
+    uf:            fromObs.uf       || 'RJ',
+    email:         fromObs.email    || '',
+    telefone:      a?.contato || '',
     descricao:     'Aluguel de itens para festa',
     codigoServico: '',
     valorBruto:    a ? String(a.total || 0) : '',
@@ -163,7 +185,16 @@ export function NotaFiscal({ alugueis }: Props) {
                         <span className="font-mono text-[0.7rem] text-accent">#{padId(a.id)}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-sans font-semibold text-[0.85rem] text-ink">{a.nome}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-sans font-semibold text-[0.85rem] text-ink">{a.nome}</span>
+                          {a.obs?.includes('NOTA FISCAL SOLICITADA') && (
+                            <span className="font-mono text-[0.58rem] px-1.5 py-0.5 rounded-sm
+                                             bg-accent/10 border border-accent/25 text-accent
+                                             uppercase tracking-[0.04em] whitespace-nowrap">
+                              NF solicitada
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-[0.82rem] text-ink2">{fmtData(a.data_entrega)}</td>
                       <td className="px-4 py-3 font-mono text-[0.82rem] text-ink">

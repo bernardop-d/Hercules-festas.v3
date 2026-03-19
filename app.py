@@ -28,6 +28,7 @@ DB_URL = os.environ.get('DATABASE_URL', '')
 
 # Preços padrão — usados apenas para seed inicial do banco
 PRECOS_PADRAO = {
+    "Conjunto de plástico (uma mesa + 4 cadeiras)": 20.00,
     "Area baby (kit 1)": 200.00,
     "Area baby (kit 2)": 520.00,
     "Piscina de bolinhas": 210.00,
@@ -165,6 +166,7 @@ def init_db(retries=12, delay=3):
                         ('frete',    'REAL DEFAULT 0'),
                         ('pago',     'INTEGER DEFAULT 0'),
                         ('status',   "TEXT DEFAULT 'confirmado'"),
+                        ('obs',      "TEXT DEFAULT ''"),
                     ]:
                         cur.execute(
                             f'ALTER TABLE alugueis ADD COLUMN IF NOT EXISTS {col} {definition}'
@@ -257,7 +259,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
 
-        if path in ('/', '/index.html'):
+        if path in ('/', '/index.html', '/solicitar'):
             self.serve_file(BASE / 'static' / 'index.html', 'text/html')
 
         elif path == '/api/precos':
@@ -327,17 +329,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not nome:
                 self.send_json({'erro': 'Nome é obrigatório.'}, 400)
                 return
-            status   = str(data.get('status', 'confirmado')).strip()
-            if status not in {'confirmado', 'separado', 'em_entrega', 'devolvido'}:
+            obs    = str(data.get('obs', '')).strip()
+            status = str(data.get('status', 'confirmado')).strip()
+            if status not in {'aguardando', 'em_negociacao', 'aguardando_pagamento', 'confirmado_parcial', 'confirmado', 'separado', 'em_entrega', 'devolvido'}:
                 status = 'confirmado'
             subtotal, itens_str = self._calc_itens(data.get('itens', {}))
             total = subtotal + frete
             row = db_exec(
                 '''INSERT INTO alugueis
-                   (nome, contato, endereco, data_entrega, itens, subtotal, frete, total, pago, status)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   (nome, contato, endereco, data_entrega, itens, subtotal, frete, total, pago, status, obs)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                    RETURNING id''',
-                (nome, contato, endereco, data_entrega, itens_str, subtotal, frete, total, pago, status)
+                (nome, contato, endereco, data_entrega, itens_str, subtotal, frete, total, pago, status, obs)
             )
             self.send_json({'id': row['id'], 'total': total, 'mensagem': 'Aluguel registrado!'}, 201)
             return
@@ -396,7 +399,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if len(parts) == 4 and parts[3] == 'status':
             data   = self.read_body()
             status = str(data.get('status', '')).strip()
-            valid  = {'confirmado', 'separado', 'em_entrega', 'devolvido'}
+            valid  = {'aguardando', 'em_negociacao', 'aguardando_pagamento', 'confirmado_parcial', 'confirmado', 'separado', 'em_entrega', 'devolvido'}
             if status not in valid:
                 self.send_json({'erro': f'Status inválido. Use: {", ".join(sorted(valid))}'}, 400)
                 return
@@ -422,18 +425,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not nome:
                 self.send_json({'erro': 'Nome é obrigatório.'}, 400)
                 return
-            status   = str(data.get('status', 'confirmado')).strip()
-            if status not in {'confirmado', 'separado', 'em_entrega', 'devolvido'}:
+            obs    = str(data.get('obs', '')).strip()
+            status = str(data.get('status', 'confirmado')).strip()
+            if status not in {'aguardando', 'em_negociacao', 'aguardando_pagamento', 'confirmado_parcial', 'confirmado', 'separado', 'em_entrega', 'devolvido'}:
                 status = 'confirmado'
             subtotal, itens_str = self._calc_itens(data.get('itens', {}))
             total = subtotal + frete
             db_exec(
                 '''UPDATE alugueis
                    SET nome=%s, contato=%s, endereco=%s, data_entrega=%s,
-                       itens=%s, subtotal=%s, frete=%s, total=%s, pago=%s, status=%s
+                       itens=%s, subtotal=%s, frete=%s, total=%s, pago=%s, status=%s, obs=%s
                    WHERE id=%s''',
                 (nome, contato, endereco, data_entrega,
-                 itens_str, subtotal, frete, total, pago, status, aluguel_id)
+                 itens_str, subtotal, frete, total, pago, status, obs, aluguel_id)
             )
             self.send_json({'mensagem': 'Aluguel atualizado.', 'total': total})
             return

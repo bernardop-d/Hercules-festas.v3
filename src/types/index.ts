@@ -10,6 +10,7 @@ export interface Aluguel {
   frete:        number
   pago:         number   // 0 | 1
   status:       string   // 'confirmado' | 'separado' | 'em_entrega' | 'devolvido'
+  obs:          string
   criado_em:    string
 }
 
@@ -26,4 +27,5 @@ export interface RentalPayload {
   pago:         boolean
   itens:        ItemDict
   status?:      string
+  obs?:         string
 }
