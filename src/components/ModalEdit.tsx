@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Aluguel, ItemDict, RentalPayload } from '../types'
 import { padId } from '../utils/format'
-import { printOrder, openWhatsapp } from '../utils/pdf'
+import { generatePdf, openWhatsapp } from '../utils/pdf'
 import { ClientForm, type FormData } from './ClientForm'
 import { ItemSelector } from './ItemSelector'
 import { OrderSummary } from './OrderSummary'
@@ -25,7 +25,8 @@ export function ModalEdit({ aluguel, precos, onClose, onSave, onDelete }: Props)
     pago:         !!aluguel.pago,
   })
   const [itens, setItens]           = useState<ItemDict>(() => parseItens(aluguel.itens))
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving]     = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   const frete    = parseFloat(form.frete) || 0
   const subtotal = Object.entries(itens).reduce((acc, [item, qty]) => {
@@ -94,7 +95,14 @@ export function ModalEdit({ aluguel, precos, onClose, onSave, onDelete }: Props)
 
   const handleWhatsapp = () => openWhatsapp(buildCurrentAluguel())
 
-  const handlePrint = () => printOrder(buildCurrentAluguel())
+  const handleGeneratePdf = async () => {
+    setPdfLoading(true)
+    try {
+      await generatePdf(buildCurrentAluguel())
+    } finally {
+      setPdfLoading(false)
+    }
+  }
 
   return (
     <div
@@ -180,17 +188,20 @@ export function ModalEdit({ aluguel, precos, onClose, onSave, onDelete }: Props)
             {/* Imprimir */}
             <button
               type="button"
-              onClick={handlePrint}
+              onClick={handleGeneratePdf}
+              disabled={pdfLoading}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-sm
                          border border-[var(--c-border)] text-ink2 text-[0.78rem]
                          font-semibold cursor-pointer hover:text-ink
-                         hover:border-[var(--c-border2)] hover:bg-bg3 transition-all"
+                         hover:border-[var(--c-border2)] hover:bg-bg3
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         transition-all"
             >
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
               </svg>
-              Imprimir
+              {pdfLoading ? 'Gerando...' : 'Gerar PDF'}
             </button>
 
             {/* WhatsApp */}

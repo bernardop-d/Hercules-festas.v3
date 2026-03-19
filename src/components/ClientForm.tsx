@@ -24,11 +24,20 @@ const labelCls = `
   uppercase tracking-[0.08em]
 `
 
+function maskPhone(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 11)
+  if (d.length <= 2)  return d
+  if (d.length <= 7)  return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
 export function ClientForm({ data, onChange }: Props) {
   const set = (field: keyof FormData) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const value = field === 'pago' ? e.target.checked : e.target.value
+    const raw   = field === 'pago' ? e.target.checked : e.target.value
+    const value = field === 'contato' ? maskPhone(raw as string) : raw
     onChange({ ...data, [field]: value })
   }
 
@@ -75,6 +84,7 @@ export function ClientForm({ data, onChange }: Props) {
             type="date"
             value={data.data_entrega}
             onChange={set('data_entrega')}
+            min={new Date().toISOString().split('T')[0]}
             className={inputCls}
           />
         </div>

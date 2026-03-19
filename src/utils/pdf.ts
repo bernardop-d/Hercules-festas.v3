@@ -64,14 +64,26 @@ export function buildOrderHtml(a: Aluguel): string {
   `
 }
 
-export function printOrder(a: Aluguel): void {
-  const el = document.getElementById('print-area')
-  if (!el) return
-  el.innerHTML = buildOrderHtml(a)
-  el.style.display = 'block'
-  window.print()
-  el.style.display = 'none'
-  el.innerHTML = ''
+export async function generatePdf(a: Aluguel): Promise<void> {
+  const { jsPDF } = await import('jspdf')
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+
+  const tmp = document.createElement('div')
+  tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:600px;background:white;'
+  tmp.innerHTML = buildOrderHtml(a)
+  document.body.appendChild(tmp)
+
+  await doc.html(tmp, {
+    callback(pdf) {
+      document.body.removeChild(tmp)
+      const fileName = `Hercules_Pedido_${padId(a.id)}_${a.nome.replace(/\s+/g, '_')}.pdf`
+      pdf.save(fileName)
+    },
+    x: 10,
+    y: 10,
+    width: 190,
+    windowWidth: 600,
+  })
 }
 
 /** Formata número para E.164 brasileiro (sem o +).
