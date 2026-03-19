@@ -1,21 +1,29 @@
 """
 Hércules Festas — Sistema de Gestão de Aluguéis
-Backend: Python puro (http.server + sqlite3)
-Zero dependências externas. Rode com: python app.py
+Backend: Python puro (http.server + psycopg2)
+Banco de dados: PostgreSQL
 Autor: Bernardo Dutra
 """
 
+import datetime
 import http.server
 import json
-import sqlite3
 import os
+import time
 import urllib.parse
 from pathlib import Path
 
-# ── Configuração ───────────────────────────────────────────
-PORT    = 5000
-BASE    = Path(__file__).parent
-DB_PATH = BASE / 'alugueis.db'
+import psycopg2
+import psycopg2.extras
+from dotenv import load_dotenv
+
+load_dotenv()  # carrega .env se existir
+
+# ── Configuração ────────────────────────────────────────────
+PORT   = int(os.environ.get('PORT', 5000))
+HOST   = os.environ.get('HOST', '0.0.0.0')
+BASE   = Path(__file__).parent
+DB_URL = os.environ.get('DATABASE_URL', '')
 
 PRECOS = {
     "Área baby (kit 1)": 200.00,
@@ -43,54 +51,97 @@ PRECOS = {
     "Tenda 11x30": 800.00,
 }
 
-# ── Banco de dados ─────────────────────────────────────────
+# ── Serialização JSON com suporte a datetime ─────────────────
+class _Encoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        return super().default(obj)
+
+def _dumps(data):
+    return json.dumps(data, ensure_ascii=False, cls=_Encoder)
+
+# ── Banco de dados ────────────────────────────────────────────
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return psycopg2.connect(DB_URL)
 
-def init_db():
-    with get_db() as conn:
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS alugueis (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome         TEXT    NOT NULL,
-                contato      TEXT,
-                endereco     TEXT,
-                data_entrega TEXT,
-                itens        TEXT,
-                total        REAL    DEFAULT 0,
-                subtotal     REAL    DEFAULT 0,
-                frete        REAL    DEFAULT 0,
-                pago         INTEGER DEFAULT 0,
-                criado_em    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        # Migração: adiciona colunas novas em bancos existentes
-        for col, definition in [
-            ('subtotal', 'REAL DEFAULT 0'),
-            ('frete',    'REAL DEFAULT 0'),
-            ('pago',     'INTEGER DEFAULT 0'),
-        ]:
+def db_fetch(sql, params=(), one=False):
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            return cur.fetchone() if one else cur.fetchall()
+    finally:
+        conn.close()
+
+def db_exec(sql, params=()):
+    """Executa um comando DML. Retorna a primeira linha (útil para RETURNING)."""
+    conn = get_db()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            conn.commit()
             try:
-                conn.execute(f'ALTER TABLE alugueis ADD COLUMN {col} {definition}')
-            except sqlite3.OperationalError:
-                pass  # Coluna já existe
-        conn.commit()
+                row = cur.fetchone()
+                return dict(row) if row else None
+            except psycopg2.ProgrammingError:
+                return None
+    finally:
+        conn.close()
 
-# ── Handler HTTP ───────────────────────────────────────────
+def init_db(retries=12, delay=3):
+    """Cria a tabela e aplica migrações. Tenta reconectar se o Postgres ainda não estiver pronto."""
+    for attempt in range(retries):
+        try:
+            conn = get_db()
+            with conn.cursor() as cur:
+                cur.execute('''
+                    CREATE TABLE IF NOT EXISTS alugueis (
+                        id           SERIAL PRIMARY KEY,
+                        nome         TEXT    NOT NULL,
+                        contato      TEXT,
+                        endereco     TEXT,
+                        data_entrega TEXT,
+                        itens        TEXT,
+                        total        REAL    DEFAULT 0,
+                        subtotal     REAL    DEFAULT 0,
+                        frete        REAL    DEFAULT 0,
+                        pago         INTEGER DEFAULT 0,
+                        criado_em    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                for col, definition in [
+                    ('subtotal', 'REAL DEFAULT 0'),
+                    ('frete',    'REAL DEFAULT 0'),
+                    ('pago',     'INTEGER DEFAULT 0'),
+                ]:
+                    cur.execute(
+                        f'ALTER TABLE alugueis ADD COLUMN IF NOT EXISTS {col} {definition}'
+                    )
+            conn.commit()
+            conn.close()
+            print('[OK] Banco de dados pronto.')
+            return
+        except psycopg2.OperationalError as e:
+            if attempt < retries - 1:
+                print(f'  Aguardando PostgreSQL... ({attempt + 1}/{retries}) — {e}')
+                time.sleep(delay)
+            else:
+                print('[ERRO] Nao foi possivel conectar ao PostgreSQL.')
+                raise
+
+# ── Handler HTTP ─────────────────────────────────────────────
 class Handler(http.server.SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(BASE / 'static'), **kwargs)
 
-    # ── Silencia os logs de acesso ───
     def log_message(self, format, *args):
-        pass
+        pass  # silencia logs de acesso
 
-    # ── Helpers ──────────────────────────────────────────
+    # ── Helpers ──────────────────────────────────────────────
     def send_json(self, data, status=200):
-        body = json.dumps(data, ensure_ascii=False).encode('utf-8')
+        body = _dumps(data).encode('utf-8')
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', len(body))
@@ -101,93 +152,78 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         length = int(self.headers.get('Content-Length', 0))
         return json.loads(self.rfile.read(length)) if length else {}
 
-    # ── GET ───────────────────────────────────────────────
+    def _calc_itens(self, itens_dict):
+        subtotal, itens_lista = 0.0, []
+        for item, qtd in itens_dict.items():
+            preco = PRECOS.get(item, 0)
+            if preco and qtd > 0:
+                sub = preco * qtd
+                subtotal += sub
+                itens_lista.append(f'{item} (x{qtd}) — R$ {sub:.2f}')
+        itens_str = ', '.join(itens_lista) if itens_lista else 'Nenhum item'
+        return subtotal, itens_str
+
+    # ── GET ───────────────────────────────────────────────────
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
 
-        # Página principal
         if path in ('/', '/index.html'):
             self.serve_file(BASE / 'static' / 'index.html', 'text/html')
 
-        # API: preços
         elif path == '/api/precos':
             self.send_json(PRECOS)
 
-        # API: listar aluguéis
         elif path == '/api/alugueis':
-            with get_db() as conn:
-                rows = conn.execute(
-                    'SELECT * FROM alugueis ORDER BY criado_em DESC'
-                ).fetchall()
+            rows = db_fetch('SELECT * FROM alugueis ORDER BY criado_em DESC')
             self.send_json([dict(r) for r in rows])
 
-        # API: buscar aluguel por ID
         elif path.startswith('/api/alugueis/'):
             aluguel_id = path.split('/')[-1]
-            with get_db() as conn:
-                row = conn.execute(
-                    'SELECT * FROM alugueis WHERE id = ?', (aluguel_id,)
-                ).fetchone()
+            row = db_fetch('SELECT * FROM alugueis WHERE id = %s', (aluguel_id,), one=True)
             if row:
                 self.send_json(dict(row))
             else:
                 self.send_json({'erro': 'Não encontrado.'}, 404)
 
-        # Arquivos estáticos (CSS, JS)
         else:
             super().do_GET()
 
-    # ── POST ──────────────────────────────────────────────
+    # ── POST ──────────────────────────────────────────────────
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
 
-        if path == '/api/alugueis':
-            data = self.read_body()
-
-            nome         = data.get('nome', '').strip()
-            contato      = data.get('contato', '').strip()
-            endereco     = data.get('endereco', '').strip()
-            data_entrega = data.get('data_entrega', '').strip()
-            itens_dict   = data.get('itens', {})
-
-            if not nome:
-                self.send_json({'erro': 'Nome é obrigatório.'}, 400)
-                return
-
-            frete = float(data.get('frete', 0) or 0)
-            pago  = 1 if data.get('pago') else 0
-
-            subtotal = 0.0
-            itens_lista = []
-            for item, qtd in itens_dict.items():
-                preco = PRECOS.get(item, 0)
-                if preco and qtd > 0:
-                    sub      = preco * qtd
-                    subtotal += sub
-                    itens_lista.append(f'{item} (x{qtd}) — R$ {sub:.2f}')
-
-            itens_str = ', '.join(itens_lista) if itens_lista else 'Nenhum item'
-            total = subtotal + frete
-
-            with get_db() as conn:
-                cur = conn.execute(
-                    '''INSERT INTO alugueis
-                       (nome, contato, endereco, data_entrega, itens, subtotal, frete, total, pago)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                    (nome, contato, endereco, data_entrega, itens_str, subtotal, frete, total, pago)
-                )
-                conn.commit()
-                novo_id = cur.lastrowid
-
-            self.send_json({'id': novo_id, 'total': total, 'mensagem': 'Aluguel registrado!'}, 201)
-        else:
+        if path != '/api/alugueis':
             self.send_json({'erro': 'Rota não encontrada.'}, 404)
+            return
 
-    # ── PATCH ─────────────────────────────────────────────
+        data         = self.read_body()
+        nome         = data.get('nome', '').strip()
+        contato      = data.get('contato', '').strip()
+        endereco     = data.get('endereco', '').strip()
+        data_entrega = data.get('data_entrega', '').strip()
+        frete        = float(data.get('frete', 0) or 0)
+        pago         = 1 if data.get('pago') else 0
+
+        if not nome:
+            self.send_json({'erro': 'Nome é obrigatório.'}, 400)
+            return
+
+        subtotal, itens_str = self._calc_itens(data.get('itens', {}))
+        total = subtotal + frete
+
+        row = db_exec(
+            '''INSERT INTO alugueis
+               (nome, contato, endereco, data_entrega, itens, subtotal, frete, total, pago)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+               RETURNING id''',
+            (nome, contato, endereco, data_entrega, itens_str, subtotal, frete, total, pago)
+        )
+        self.send_json({'id': row['id'], 'total': total, 'mensagem': 'Aluguel registrado!'}, 201)
+
+    # ── PATCH ─────────────────────────────────────────────────
     def do_PATCH(self):
         path  = urllib.parse.urlparse(self.path).path
         parts = path.strip('/').split('/')
-        # parts: ['api', 'alugueis', ':id'] ou ['api', 'alugueis', ':id', 'pagamento']
 
         if len(parts) < 3 or parts[1] != 'alugueis':
             self.send_json({'erro': 'Rota não encontrada.'}, 404)
@@ -195,85 +231,66 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         aluguel_id = parts[2]
 
-        # PATCH /api/alugueis/:id/pagamento — toggle rápido de pagamento
+        # PATCH /api/alugueis/:id/pagamento — toggle rápido
         if len(parts) == 4 and parts[3] == 'pagamento':
             data = self.read_body()
             pago = 1 if data.get('pago') else 0
-            with get_db() as conn:
-                conn.execute('UPDATE alugueis SET pago = ? WHERE id = ?', (pago, aluguel_id))
-                conn.commit()
+            db_exec('UPDATE alugueis SET pago = %s WHERE id = %s', (pago, aluguel_id))
             self.send_json({'mensagem': 'Pagamento atualizado.'})
             return
 
         # PATCH /api/alugueis/:id — edição completa
         if len(parts) == 3:
-            data = self.read_body()
-
+            data         = self.read_body()
             nome         = data.get('nome', '').strip()
             contato      = data.get('contato', '').strip()
             endereco     = data.get('endereco', '').strip()
             data_entrega = data.get('data_entrega', '').strip()
             frete        = float(data.get('frete', 0) or 0)
             pago         = 1 if data.get('pago') else 0
-            itens_dict   = data.get('itens', {})
 
             if not nome:
                 self.send_json({'erro': 'Nome é obrigatório.'}, 400)
                 return
 
-            subtotal = 0.0
-            itens_lista = []
-            for item, qtd in itens_dict.items():
-                preco = PRECOS.get(item, 0)
-                if preco and qtd > 0:
-                    sub      = preco * qtd
-                    subtotal += sub
-                    itens_lista.append(f'{item} (x{qtd}) — R$ {sub:.2f}')
-
-            itens_str = ', '.join(itens_lista) if itens_lista else 'Nenhum item'
+            subtotal, itens_str = self._calc_itens(data.get('itens', {}))
             total = subtotal + frete
 
-            with get_db() as conn:
-                conn.execute('''
-                    UPDATE alugueis
-                    SET nome=?, contato=?, endereco=?, data_entrega=?,
-                        itens=?, subtotal=?, frete=?, total=?, pago=?
-                    WHERE id=?
-                ''', (nome, contato, endereco, data_entrega,
-                      itens_str, subtotal, frete, total, pago, aluguel_id))
-                conn.commit()
-
+            db_exec(
+                '''UPDATE alugueis
+                   SET nome=%s, contato=%s, endereco=%s, data_entrega=%s,
+                       itens=%s, subtotal=%s, frete=%s, total=%s, pago=%s
+                   WHERE id=%s''',
+                (nome, contato, endereco, data_entrega,
+                 itens_str, subtotal, frete, total, pago, aluguel_id)
+            )
             self.send_json({'mensagem': 'Aluguel atualizado.', 'total': total})
             return
 
         self.send_json({'erro': 'Rota não encontrada.'}, 404)
 
-    # ── DELETE ────────────────────────────────────────────
+    # ── DELETE ────────────────────────────────────────────────
     def do_DELETE(self):
         path = urllib.parse.urlparse(self.path).path
 
-        if path.startswith('/api/alugueis/'):
-            aluguel_id = path.split('/')[-1]
-            with get_db() as conn:
-                row = conn.execute(
-                    'SELECT id FROM alugueis WHERE id = ?', (aluguel_id,)
-                ).fetchone()
-
-                if not row:
-                    self.send_json({'erro': 'Aluguel não encontrado.'}, 404)
-                    return
-
-                conn.execute('DELETE FROM alugueis WHERE id = ?', (aluguel_id,))
-                conn.commit()
-
-            self.send_json({'mensagem': 'Aluguel excluído.'})
-        else:
+        if not path.startswith('/api/alugueis/'):
             self.send_json({'erro': 'Rota não encontrada.'}, 404)
+            return
 
-    # ── Serve arquivo estático ────────────────────────────
-    def serve_file(self, path, content_type):
+        aluguel_id = path.split('/')[-1]
+        row = db_fetch('SELECT id FROM alugueis WHERE id = %s', (aluguel_id,), one=True)
+
+        if not row:
+            self.send_json({'erro': 'Aluguel não encontrado.'}, 404)
+            return
+
+        db_exec('DELETE FROM alugueis WHERE id = %s', (aluguel_id,))
+        self.send_json({'mensagem': 'Aluguel excluído.'})
+
+    # ── Serve arquivo estático ────────────────────────────────
+    def serve_file(self, fpath, content_type):
         try:
-            content = path.read_bytes()
+            content = fpath.read_bytes()
             self.send_response(200)
             self.send_header('Content-Type', f'{content_type}; charset=utf-8')
             self.send_header('Content-Length', len(content))
@@ -282,11 +299,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except FileNotFoundError:
             self.send_json({'erro': 'Arquivo não encontrado.'}, 404)
 
-# ── Inicialização ──────────────────────────────────────────
+# ── Inicialização ─────────────────────────────────────────────
 if __name__ == '__main__':
     init_db()
-    server = http.server.HTTPServer(('localhost', PORT), Handler)
-    print(f'Hércules Festas rodando em http://localhost:{PORT}')
+    server = http.server.HTTPServer((HOST, PORT), Handler)
+    print(f'Hércules Festas rodando em http://{HOST}:{PORT}')
     print('Pressione Ctrl+C para encerrar.')
     try:
         server.serve_forever()

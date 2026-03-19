@@ -5,6 +5,9 @@ const { spawn, spawnSync }          = require('child_process')
 const path = require('path')
 const http = require('http')
 
+// Carrega .env para que PYTHON_PATH e DATABASE_URL fiquem disponíveis
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
+
 const PORT = 5000
 let win            = null
 let pythonProcess  = null
@@ -12,13 +15,17 @@ let loadRetries    = 0
 
 // ── Detecta o executável Python disponível ───────────────────
 function findPython() {
+  // Permite forçar via variável de ambiente
+  if (process.env.PYTHON_PATH) return process.env.PYTHON_PATH
+
   const candidates = process.platform === 'win32'
-    ? ['py', 'python', 'python3']
+    ? ['python', 'python3', 'py']
     : ['python3', 'python']
 
   for (const exe of candidates) {
     try {
-      const r = spawnSync(exe, ['--version'], { timeout: 2000 })
+      // Verifica se o Python roda E tem psycopg2 instalado
+      const r = spawnSync(exe, ['-c', 'import psycopg2'], { timeout: 3000 })
       if (r.status === 0) return exe
     } catch (_) { /* próximo */ }
   }
@@ -33,9 +40,16 @@ function startPython() {
   console.log(`[Python] Iniciando com: ${exe} ${script}`)
 
   pythonProcess = spawn(exe, [script], {
-    cwd:     path.join(__dirname, '..'),
-    stdio:   'pipe',
+    cwd:      path.join(__dirname, '..'),
+    stdio:    'pipe',
     detached: false,
+    env: {
+      ...process.env,
+      DATABASE_URL: process.env.DATABASE_URL
+        || 'postgresql://hercules:hercules@localhost:5432/hercules',
+      PORT: String(PORT),
+      HOST: '127.0.0.1',
+    },
   })
 
   pythonProcess.stdout?.on('data', d => process.stdout.write(`[Python] ${d}`))

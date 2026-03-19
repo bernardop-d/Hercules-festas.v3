@@ -40,6 +40,10 @@ export function NovoAluguel({ precos, onSubmit }: Props) {
       showFeedback('Nome é obrigatório.', 'erro')
       return
     }
+    if (Object.keys(itens).length === 0) {
+      showFeedback('Adicione pelo menos um item ao pedido.', 'erro')
+      return
+    }
 
     setLoading(true)
     try {
@@ -101,6 +105,7 @@ export function NovoAluguel({ precos, onSubmit }: Props) {
             </div>
 
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={loading}
               className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4

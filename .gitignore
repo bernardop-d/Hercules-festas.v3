@@ -34,6 +34,9 @@ electron/build/dist/
 *.swp
 *.swo
 
+# Variáveis de ambiente (contém senhas)
+.env
+
 # OS
 .DS_Store
 Thumbs.db

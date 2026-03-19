@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(\"C:\\\\Users\\\\karma\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -c \"import psycopg2; print\\(''ok''\\)\")",
+      "Bash(\"C:\\\\Users\\\\karma\\\\AppData\\\\Local\\\\Microsoft\\\\WindowsApps\\\\python.exe\" -c \"import psycopg2; print\\(''ok''\\)\")",
+      "Bash(py -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(py -c \"import psycopg2; print\\(''psycopg2 ok''\\)\")",
+      "Bash(npm install:*)"
+    ]
+  }
+}

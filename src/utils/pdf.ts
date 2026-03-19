@@ -1,95 +1,159 @@
 import type { Aluguel } from '../types'
 import { fmt, fmtData, padId } from './format'
 
-
-export function buildOrderHtml(a: Aluguel): string {
-  const data = fmtData(a.data_entrega)
-  const itensHtml = a.itens && a.itens !== 'Nenhum item'
-    ? a.itens.split(', ').map(i => `<li>${i}</li>`).join('')
-    : '<li>Nenhum item</li>'
-
-  return `
-    <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;font-size:14px;color:#111;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;">
-        <div>
-          <h1 style="font-size:22px;font-weight:700;margin:0;">🎉 Hércules Festas</h1>
-          <p style="color:#666;margin:4px 0 0;font-size:12px;">Gestão de Aluguéis</p>
-        </div>
-        <div style="text-align:right;">
-          <p style="font-size:12px;color:#666;margin:0;">Pedido</p>
-          <p style="font-size:18px;font-weight:700;margin:2px 0 0;">#${padId(a.id)}</p>
-        </div>
-      </div>
-      <hr style="border:none;border-top:2px solid #000;margin-bottom:20px;" />
-      <table style="width:100%;margin-bottom:20px;">
-        <tr>
-          <td style="width:50%;vertical-align:top;">
-            <p style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px;">Cliente</p>
-            <p style="font-weight:700;font-size:15px;margin:0 0 4px;">${a.nome}</p>
-            <p style="margin:2px 0;font-size:13px;">${a.contato || '—'}</p>
-          </td>
-          <td style="width:50%;vertical-align:top;">
-            <p style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px;">Entrega</p>
-            <p style="font-size:13px;margin:2px 0;">${data}</p>
-            <p style="font-size:13px;margin:2px 0;">${a.endereco || '—'}</p>
-          </td>
-        </tr>
-      </table>
-      <p style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px;">Itens</p>
-      <ul style="margin:0 0 20px;padding:0 0 0 18px;font-size:13px;line-height:2;">${itensHtml}</ul>
-      <hr style="border:none;border-top:1px solid #ddd;margin-bottom:16px;" />
-      <table style="width:100%;font-size:14px;">
-        <tr>
-          <td style="color:#666;padding:4px 0;">Subtotal</td>
-          <td style="text-align:right;font-weight:500;">R$ ${fmt(a.subtotal || 0)}</td>
-        </tr>
-        <tr>
-          <td style="color:#666;padding:4px 0;">Frete</td>
-          <td style="text-align:right;font-weight:500;">R$ ${fmt(a.frete || 0)}</td>
-        </tr>
-        <tr style="border-top:2px solid #000;">
-          <td style="padding:8px 0 0;font-weight:700;font-size:16px;">Total</td>
-          <td style="text-align:right;font-weight:700;font-size:16px;padding-top:8px;">R$ ${fmt(a.total || 0)}</td>
-        </tr>
-      </table>
-      <div style="margin-top:16px;padding:10px 14px;border-radius:6px;background:${a.pago ? '#f0fdf4' : '#fef2f2'};border:1px solid ${a.pago ? '#bbf7d0' : '#fecaca'};">
-        <p style="margin:0;font-weight:600;color:${a.pago ? '#16a34a' : '#dc2626'};font-size:13px;">
-          ${a.pago ? '✓ Pagamento recebido' : '○ Pagamento pendente'}
-        </p>
-      </div>
-      <p style="margin-top:24px;font-size:11px;color:#999;text-align:center;">
-        Gerado em ${new Date().toLocaleString('pt-BR')} · Hércules Festas
-      </p>
-    </div>
-  `
-}
+const L = 20   // margem esquerda (mm)
+const R = 190  // margem direita (mm)
+const W = 210  // largura A4 (mm)
 
 export async function generatePdf(a: Aluguel): Promise<void> {
   const { jsPDF } = await import('jspdf')
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const doc  = new jsPDF({ unit: 'mm', format: 'a4' })
+  const data = fmtData(a.data_entrega)
 
-  const tmp = document.createElement('div')
-  tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:600px;background:white;'
-  tmp.innerHTML = buildOrderHtml(a)
-  document.body.appendChild(tmp)
+  const itens = a.itens && a.itens !== 'Nenhum item'
+    ? a.itens.split(', ')
+    : ['Nenhum item']
 
-  await doc.html(tmp, {
-    callback(pdf) {
-      document.body.removeChild(tmp)
-      const fileName = `Hercules_Pedido_${padId(a.id)}_${a.nome.replace(/\s+/g, '_')}.pdf`
-      pdf.save(fileName)
-    },
-    x: 10,
-    y: 10,
-    width: 190,
-    windowWidth: 600,
-  })
+  let y = 22
+
+  // ── Cabeçalho ──────────────────────────────────────────────
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(18)
+  doc.setTextColor(20, 20, 20)
+  doc.text('Hercules Festas', L, y)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(120, 120, 120)
+  doc.text('Gestao de Alugueis', L, y + 6)
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.setTextColor(120, 120, 120)
+  doc.text('Pedido', R, y, { align: 'right' })
+  doc.setFontSize(16)
+  doc.setTextColor(20, 20, 20)
+  doc.text(`#${padId(a.id)}`, R, y + 6, { align: 'right' })
+
+  y += 14
+
+  // linha separadora grossa
+  doc.setDrawColor(20, 20, 20)
+  doc.setLineWidth(0.6)
+  doc.line(L, y, R, y)
+  y += 8
+
+  // ── Dados do cliente ───────────────────────────────────────
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(130, 130, 130)
+  doc.text('CLIENTE', L, y)
+  doc.text('ENTREGA', W / 2, y)
+  y += 5
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(13)
+  doc.setTextColor(20, 20, 20)
+  doc.text(a.nome, L, y)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.setTextColor(60, 60, 60)
+  doc.text(data, W / 2, y)
+  y += 6
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.setTextColor(80, 80, 80)
+  if (a.contato) doc.text(a.contato, L, y)
+  if (a.endereco) doc.text(a.endereco, W / 2, y)
+
+  y += 10
+
+  // linha separadora fina
+  doc.setDrawColor(200, 200, 200)
+  doc.setLineWidth(0.3)
+  doc.line(L, y, R, y)
+  y += 7
+
+  // ── Itens ──────────────────────────────────────────────────
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(130, 130, 130)
+  doc.text('ITENS', L, y)
+  y += 6
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.setTextColor(30, 30, 30)
+  for (const item of itens) {
+    doc.text(`- ${item}`, L, y)
+    y += 7
+  }
+
+  y += 2
+
+  // linha separadora fina
+  doc.setDrawColor(200, 200, 200)
+  doc.setLineWidth(0.3)
+  doc.line(L, y, R, y)
+  y += 7
+
+  // ── Totais ─────────────────────────────────────────────────
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.setTextColor(100, 100, 100)
+  doc.text('Subtotal', L, y)
+  doc.setTextColor(30, 30, 30)
+  doc.text(`R$ ${fmt(a.subtotal || 0)}`, R, y, { align: 'right' })
+  y += 7
+
+  doc.setTextColor(100, 100, 100)
+  doc.text('Frete', L, y)
+  doc.setTextColor(30, 30, 30)
+  doc.text(`R$ ${fmt(a.frete || 0)}`, R, y, { align: 'right' })
+  y += 5
+
+  // linha total (grossa)
+  doc.setDrawColor(20, 20, 20)
+  doc.setLineWidth(0.6)
+  doc.line(L, y, R, y)
+  y += 7
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(13)
+  doc.setTextColor(20, 20, 20)
+  doc.text('Total', L, y)
+  doc.text(`R$ ${fmt(a.total || 0)}`, R, y, { align: 'right' })
+  y += 12
+
+  // ── Status de pagamento ────────────────────────────────────
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  if (a.pago) {
+    doc.setTextColor(22, 163, 74)
+    doc.text('[PAGO] Pagamento recebido', L, y)
+  } else {
+    doc.setTextColor(220, 38, 38)
+    doc.text('[PENDENTE] Aguardando pagamento', L, y)
+  }
+
+  // ── Rodapé ─────────────────────────────────────────────────
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(160, 160, 160)
+  doc.text(
+    `Gerado em ${new Date().toLocaleString('pt-BR')} - Hercules Festas`,
+    W / 2,
+    280,
+    { align: 'center' }
+  )
+
+  const fileName = `Hercules_Pedido_${padId(a.id)}_${a.nome.replace(/\s+/g, '_')}.pdf`
+  doc.save(fileName)
 }
 
-/** Formata número para E.164 brasileiro (sem o +).
- *  Aceita formatos como (21) 99999-9999, 21999999999, 5521999999999, etc.
- *  Retorna null se não conseguir extrair um número válido.
- */
+/** Formata número para E.164 brasileiro (sem o +). */
 function formatPhone(raw: string): string | null {
   const digits = raw.replace(/\D/g, '')
   if (digits.length === 10 || digits.length === 11) return `55${digits}`
